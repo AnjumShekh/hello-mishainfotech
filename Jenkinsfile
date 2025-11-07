@@ -29,7 +29,6 @@ pipeline {
                 script {
                     echo "📦 Uploading build folder recursively to FTP..."
 
-                    // Use Jenkins credentials securely
                     withCredentials([usernamePassword(credentialsId: 'ftp-credentials', usernameVariable: 'FTP_USER', passwordVariable: 'FTP_PASS')]) {
                         bat '''
                             cd build
@@ -38,3 +37,17 @@ pipeline {
                             )
                         '''
                     }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed! Check the console logs for details."
+        }
+    }
+}
