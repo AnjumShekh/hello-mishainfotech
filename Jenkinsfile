@@ -10,7 +10,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/AnjumShekh/your-react-repo.git'
+                git branch: 'main', url: 'https://github.com/AnjumShekh/hello-mishainfotech'
             }
         }
 
