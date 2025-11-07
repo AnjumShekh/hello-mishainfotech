@@ -1,40 +1,52 @@
-{
-  "name": "hello-mishainfotech",
-  "version": "0.1.0",
-  "private": true,
-  "homepage": ".",
-  "dependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^13.5.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  }
+pipeline {
+    agent any
+
+    environment {
+        FTP_SERVER = '161.97.130.165'
+        FTP_USER = 'your_ftp_username'
+        FTP_PASSWORD = 'your_ftp_password'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/AnjumShekh/your-react-repo.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                bat 'npm install'
+            }
+        }
+
+        stage('Build React App') {
+            steps {
+                bat 'npm run build'
+            }
+        }
+
+        stage('Deploy to IIS via FTP') {
+            steps {
+                script {
+                    echo "📦 Uploading build folder recursively..."
+                    bat '''
+                        cd build
+                        for /r %%F in (*) do (
+                            curl -s -T "%%F" -u %FTP_USER%:%FTP_PASSWORD% ftp://%FTP_SERVER%:21/ --ftp-create-dirs
+                        )
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed!"
+        }
+    }
 }
