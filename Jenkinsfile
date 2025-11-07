@@ -1,94 +1,59 @@
-pipeline {
-    agent any
+stage('Deploy to IIS via FTP') {
+  steps {
+    script {
+      echo "📦 Uploading build folder recursively to FTP root..."
+      withCredentials([usernamePassword(credentialsId: 'ftp-credentials', usernameVariable: 'FTP_USER', passwordVariable: 'FTP_PASS')]) {
+        powershell '''
+          $sourcePath = "build"
+          $ftpServer = "ftp://161.97.130.165"   # Uploading to root
+          $ftpUser = $env:FTP_USER
+          $ftpPass = $env:FTP_PASS
 
-    stages {
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', url: 'https://github.com/AnjumShekh/hello-mishainfotech.git'
+          function New-FtpDirectory {
+            param($ftpUrl, $credentials)
+            try {
+              $req = [System.Net.FtpWebRequest]::Create($ftpUrl)
+              $req.Credentials = $credentials
+              $req.Method = [System.Net.WebRequestMethods+Ftp]::MakeDirectory
+              $req.GetResponse().Close()
+              Write-Host "📁 Created folder: $ftpUrl"
+            } catch {
+              # Ignore 'folder already exists' errors
             }
-        }
+          }
 
-        stage('Install Dependencies') {
-            steps {
-                bat 'npm install'
+          $creds = New-Object System.Net.NetworkCredential($ftpUser, $ftpPass)
+
+          Get-ChildItem -Path $sourcePath -Recurse | ForEach-Object {
+            if (-not $_.PSIsContainer) {
+              $relativePath = $_.FullName.Substring($sourcePath.Length + 1).Replace("\\", "/")
+              $remoteDir = [System.IO.Path]::GetDirectoryName($relativePath).Replace("\\", "/")
+
+              # Create directory on FTP if it doesn’t exist
+              if ($remoteDir -ne "") {
+                $ftpDirUrl = "$ftpServer/$remoteDir"
+                New-FtpDirectory -ftpUrl $ftpDirUrl -credentials $creds
+              }
+
+              # Upload file
+              $uri = "$ftpServer/$relativePath"
+              Write-Host "⬆️ Uploading: $uri"
+              $ftpReq = [System.Net.FtpWebRequest]::Create($uri)
+              $ftpReq.Credentials = $creds
+              $ftpReq.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile
+              $ftpReq.UseBinary = $true
+              $ftpReq.UsePassive = $true
+              $ftpReq.KeepAlive = $false
+              $ftpReq.Timeout = 10000
+              $content = [System.IO.File]::ReadAllBytes($_.FullName)
+              $ftpStream = $ftpReq.GetRequestStream()
+              $ftpStream.Write($content, 0, $content.Length)
+              $ftpStream.Close()
+              Write-Host "✅ Uploaded: $relativePath"
             }
-        }
-
-        stage('Build React App') {
-            steps {
-                bat 'npm run build'
-            }
-        }
-
-        stage('Deploy to IIS via FTP') {
-            steps {
-                script {
-                    echo "📦 Uploading build folder recursively to FTP..."
-
-                    withCredentials([usernamePassword(credentialsId: 'ftp-credentials', usernameVariable: 'FTP_USER', passwordVariable: 'FTP_PASS')]) {
-                        powershell '''
-                        $ErrorActionPreference = "Stop"
-                        $localPath = "build"
-                        $ftpServer = "ftp://161.97.130.165"
-                        $ftpUser = "${env:FTP_USER}"
-                        $ftpPass = "${env:FTP_PASS}"
-
-                        Write-Host "🔍 Testing FTP connection to $ftpServer ..."
-                        try {
-                            $request = [System.Net.WebRequest]::Create("$ftpServer")
-                            $request.Method = [System.Net.WebRequestMethods+Ftp]::ListDirectory
-                            $request.Credentials = New-Object System.Net.NetworkCredential($ftpUser, $ftpPass)
-                            $response = $request.GetResponse()
-                            $response.Close()
-                            Write-Host "✅ FTP connection OK!"
-                        } catch {
-                            Write-Host "❌ FTP connection failed!"
-                            Write-Host $_.Exception.Message
-                            exit 1
-                        }
-
-                        Function Upload-FtpFile($source, $target, $credentials) {
-                            try {
-                                $uri = New-Object System.Uri($target)
-                                $ftpRequest = [System.Net.FtpWebRequest]::Create($uri)
-                                $ftpRequest.Credentials = $credentials
-                                $ftpRequest.Method = [System.Net.WebRequestMethods+Ftp]::UploadFile
-                                $ftpRequest.UseBinary = $true
-                                $ftpRequest.UsePassive = $true
-                                $ftpRequest.Timeout = 10000
-
-                                $content = [System.IO.File]::ReadAllBytes($source)
-                                $ftpStream = $ftpRequest.GetRequestStream()
-                                $ftpStream.Write($content, 0, $content.Length)
-                                $ftpStream.Close()
-                                Write-Host "📤 Uploaded: $($source -replace '^build\\\\','')"
-                            } catch {
-                                Write-Host "⚠️ Failed to upload: $($source -replace '^build\\\\','')"
-                                Write-Host $_.Exception.Message
-                            }
-                        }
-
-                        $credentials = New-Object System.Net.NetworkCredential($ftpUser, $ftpPass)
-                        $files = Get-ChildItem -Recurse -File $localPath
-
-                        foreach ($file in $files) {
-                            $relativePath = $file.FullName.Substring($localPath.Length + 1).Replace("\\", "/")
-                            $remoteFile = "$ftpServer/$relativePath"
-                            Upload-FtpFile $file.FullName $remoteFile $credentials
-                        }
-                        '''
-                    }
-                }
-            }
-        }
+          }
+        '''
+      }
     }
-
-    post {
-        success {
-            echo "✅ Deployment successful!"
-        }
-        failure {
-            echo "❌ Deployment failed!"
-        }
-    }
+  }
 }
