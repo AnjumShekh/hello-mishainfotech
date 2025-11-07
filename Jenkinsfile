@@ -3,8 +3,6 @@ pipeline {
 
     environment {
         FTP_SERVER = '161.97.130.165'
-        FTP_USER = 'your_ftp_username'
-        FTP_PASSWORD = 'your_ftp_password'
     }
 
     stages {
@@ -29,24 +27,14 @@ pipeline {
         stage('Deploy to IIS via FTP') {
             steps {
                 script {
-                    echo "📦 Uploading build folder recursively..."
-                    bat '''
-                        cd build
-                        for /r %%F in (*) do (
-                            curl -s -T "%%F" -u %FTP_USER%:%FTP_PASSWORD% ftp://%FTP_SERVER%:21/ --ftp-create-dirs
-                        )
-                    '''
-                }
-            }
-        }
-    }
+                    echo "📦 Uploading build folder recursively to FTP..."
 
-    post {
-        success {
-            echo "✅ Deployment successful!"
-        }
-        failure {
-            echo "❌ Deployment failed!"
-        }
-    }
-}
+                    // Use Jenkins credentials securely
+                    withCredentials([usernamePassword(credentialsId: 'ftp-credentials', usernameVariable: 'FTP_USER', passwordVariable: 'FTP_PASS')]) {
+                        bat '''
+                            cd build
+                            for /R %%F in (*) do (
+                                curl -s -T "%%F" -u %FTP_USER%:%FTP_PASS% ftp://161.97.130.165:21/ --ftp-create-dirs
+                            )
+                        '''
+                    }
